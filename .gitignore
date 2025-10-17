@@ -1,0 +1,17 @@
+# Node and Python environments
+node_modules
+venv
+__pycache__/
+
+# Logs and environment files
+*.log
+.env
+
+# Editor and system files
+.claude
+.qodo
+.DS_Store
+
+# Ignore specific tests
+test_*.py
+verify_setup.py

@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: OpsForge AI - Agentic IT Operations
+
+Parameters:
+  AnthropicApiKey:
+    Type: String
+    NoEcho: true
+    Description: Anthropic API key for Claude
+
+Resources:
+  OpsForgeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: opsforge-ai-agent
+      Runtime: python3.10
+      Handler: lambda_handler.lambda_handler
+      CodeUri: ./
+      MemorySize: 512
+      Timeout: 300
+      Environment:
+        Variables:
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          STRANDS_MODEL_ID: us.anthropic.claude-sonnet-4-20250514-v1:0
+          AWS_REGION: us-east-1
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+              Resource: '*'
+      Events:
+        AlertEvent:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - opsforge.alerts
+        MetricEvent:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - opsforge.metrics
+
+  OpsForgeApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowOrigin: "'*'"
+        AllowMethods: "'POST,GET,OPTIONS'"
+        AllowHeaders: "'Content-Type'"
+
+  OpsForgeApiEndpoint:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: opsforge-api
+      Runtime: python3.10
+      Handler: lambda_handler.lambda_handler
+      CodeUri: ./
+      MemorySize: 512
+      Timeout: 60
+      Environment:
+        Variables:
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref OpsForgeApi
+            Path: /analyze
+            Method: POST
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint
+    Value: !Sub 'https://${OpsForgeApi}.execute-api.${AWS::Region}.amazonaws.com/prod/analyze'
+  
+  FunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt OpsForgeFunction.Arn
