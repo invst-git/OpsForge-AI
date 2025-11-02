@@ -1,8 +1,0 @@
-Collecting strands
-  Downloading Strands-0.1.0-cp310-cp310-win_amd64.whl.metadata (2.2 kB)
-Requirement already satisfied: networkx in c:\users\hai2n\appdata\local\programs\python\python310\lib\site-packages (3.4.2)
-Requirement already satisfied: numpy in c:\users\hai2n\appdata\local\programs\python\python310\lib\site-packages (from strands) (2.2.6)
-Downloading Strands-0.1.0-cp310-cp310-win_amd64.whl (596 kB)
-   ---------------------------------------- 596.2/596.2 kB 3.6 MB/s  0:00:00
-Installing collected packages: strands
-Successfully installed strands-0.1.0
