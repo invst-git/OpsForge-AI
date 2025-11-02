@@ -207,6 +207,3 @@ Known Notes
 - The local prototype is resilient to partial failures (e.g., agent LLM errors) and continues processing with degraded outputs where applicable.
 - The Lambda handler references orchestrator usage; ensure the orchestrator symbol aligns with the implementation before deploying serverless.
 
-License
--------
-No license is included. Consult the repository owner before reuse or distribution.
