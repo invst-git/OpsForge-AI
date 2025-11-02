@@ -6,11 +6,47 @@ __pycache__/
 # Logs and environment files
 *.log
 .env
+.env.local
+.env.*.local
 
 # Editor and system files
 .claude
 .qodo
 .DS_Store
+.idea/
+.vscode/
+Thumbs.db
+desktop.ini
+
+# Build artifacts
+dist/
+build/
+coverage/
+.eslintcache
+.parcel-cache/
+
+# Python cache and tooling
+*.py[cod]
+.venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.nox/
+.tox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+pip-wheel-metadata/
+*.egg-info/
+.eggs/
+
+# Markdown: ignore all except README
+*.md
+!README.md
+!README.MD
 
 # Ignore specific tests
 test_*.py
