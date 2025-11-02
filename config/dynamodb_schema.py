@@ -62,11 +62,11 @@ def create_tables():
     for table_config in tables:
         try:
             table = dynamodb.create_table(**table_config)
-            print(f"✅ Creating {table_config['TableName']}...")
+            print(f"Creating {table_config['TableName']}...")
             table.wait_until_exists()
-            print(f"✅ {table_config['TableName']} ready")
+            print(f"{table_config['TableName']} ready")
         except dynamodb.meta.client.exceptions.ResourceInUseException:
-            print(f"⚠️  {table_config['TableName']} already exists")
+            print(f"{table_config['TableName']} already exists")
 
 if __name__ == '__main__':
     create_tables()

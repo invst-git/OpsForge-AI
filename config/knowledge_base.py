@@ -13,6 +13,7 @@ class KnowledgeBase:
             self.incident_memory = {}
             self.pattern_library = {}
             self.agent_knowledge = {}
+            self.agent_selection_patterns = {}  # Phase C: Track keyword→agents→success
             self.local_mode = True
         else:
             self.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
@@ -25,7 +26,7 @@ class KnowledgeBase:
     def store_incident(self, incident_data: Dict) -> str:
         """Store incident with agent decisions"""
         incident_id = incident_data.get('incident_id') or f"INC-{uuid.uuid4().hex[:8]}"
-        
+
         record = {
             'incident_id': incident_id,
             'timestamp': int(datetime.now().timestamp()),
@@ -34,14 +35,18 @@ class KnowledgeBase:
             'actions_taken': incident_data.get('actions_taken', []),
             'outcome': incident_data.get('outcome', 'pending'),
             'agents_involved': incident_data.get('agents_involved', []),
-            'metadata': incident_data.get('metadata', {})
+            'metadata': incident_data.get('metadata', {}),
+            # NEW: Processing state tracking (Phase 1)
+            'processing_state': incident_data.get('processing_state', 'created'),
+            'incident_actions': incident_data.get('incident_actions', []),  # Actions specific to this incident
+            'processing_timeline': incident_data.get('processing_timeline', [])  # Real timeline of events
         }
-        
+
         if self.local_mode:
             self.incident_memory[incident_id] = record
         else:
             self.incident_table.put_item(Item=record)
-        
+
         return incident_id
     
     def get_incident(self, incident_id: str) -> Optional[Dict]:
@@ -140,6 +145,142 @@ class KnowledgeBase:
                     successes += 1
                 pattern['success_rate'] = successes / pattern['occurrences']
         # DynamoDB implementation would use UpdateItem
+
+    # NEW PHASE 1: Incident-Specific Action Tracking
+    def add_incident_action(self, incident_id: str, action: Dict) -> None:
+        """Add an action specific to an incident"""
+        incident = self.get_incident(incident_id)
+        if incident:
+            if 'incident_actions' not in incident:
+                incident['incident_actions'] = []
+            incident['incident_actions'].append({
+                'action_type': action.get('type'),
+                'agent': action.get('agent'),
+                'description': action.get('description'),
+                'timestamp': int(datetime.now().timestamp()),
+                'status': action.get('status', 'completed')
+            })
+            self.incident_memory[incident_id] = incident
+
+    def add_timeline_event(self, incident_id: str, event: Dict) -> None:
+        """Add a timeline event to incident processing"""
+        incident = self.get_incident(incident_id)
+        if incident:
+            if 'processing_timeline' not in incident:
+                incident['processing_timeline'] = []
+            incident['processing_timeline'].append({
+                'timestamp': int(datetime.now().timestamp()),
+                'agent': event.get('agent'),
+                'event': event.get('event'),
+                'details': event.get('details', {})
+            })
+            self.incident_memory[incident_id] = incident
+
+    def update_incident_processing_state(self, incident_id: str, new_state: str) -> None:
+        """Update the processing state of an incident"""
+        incident = self.get_incident(incident_id)
+        if incident:
+            incident['processing_state'] = new_state
+            self.incident_memory[incident_id] = incident
+
+    def get_incident_actions(self, incident_id: str) -> List[Dict]:
+        """Get all actions taken on a specific incident"""
+        incident = self.get_incident(incident_id)
+        if incident:
+            return incident.get('incident_actions', [])
+        return []
+
+    def get_incident_timeline(self, incident_id: str) -> List[Dict]:
+        """Get the processing timeline for an incident"""
+        incident = self.get_incident(incident_id)
+        if incident:
+            return incident.get('processing_timeline', [])
+        return []
+
+    # Phase C: Agent Selection Pattern Learning
+    def record_agent_selection(self, keywords: List[str], agents_used: List[str], outcome_quality: float):
+        """Record which agents were selected for which keywords and how successful it was
+
+        Args:
+            keywords: Keywords extracted from alert titles
+            agents_used: List of agents that were selected
+            outcome_quality: Success score 0.0-1.0 (1.0 = fully resolved, 0.0 = failed)
+        """
+        if not self.local_mode:
+            return  # DynamoDB implementation later
+
+        # Create pattern key from sorted keywords
+        pattern_key = "_".join(sorted(keywords[:3]))  # Use top 3 keywords
+
+        if pattern_key not in self.agent_selection_patterns:
+            self.agent_selection_patterns[pattern_key] = {
+                "keywords": keywords[:3],
+                "selections": []
+            }
+
+        # Record this selection
+        self.agent_selection_patterns[pattern_key]["selections"].append({
+            "agents": sorted(agents_used),
+            "outcome_quality": outcome_quality,
+            "timestamp": datetime.now().isoformat()
+        })
+
+    def get_learned_agent_suggestions(self, keywords: List[str], min_incidents: int = 3) -> Optional[Dict]:
+        """Get learned agent suggestions based on past successful patterns
+
+        Args:
+            keywords: Keywords from current incident
+            min_incidents: Minimum incidents needed to make suggestions
+
+        Returns:
+            Dict with suggested agents and confidence, or None if not enough data
+        """
+        if not self.local_mode:
+            return None  # DynamoDB implementation later
+
+        # Try to find matching pattern
+        pattern_key = "_".join(sorted(keywords[:3]))
+
+        if pattern_key not in self.agent_selection_patterns:
+            return None
+
+        pattern = self.agent_selection_patterns[pattern_key]
+        selections = pattern["selections"]
+
+        if len(selections) < min_incidents:
+            return None  # Not enough data
+
+        # Calculate success rate for each agent combination
+        agent_combo_scores = {}
+
+        for selection in selections:
+            agents_key = tuple(selection["agents"])
+            quality = selection["outcome_quality"]
+
+            if agents_key not in agent_combo_scores:
+                agent_combo_scores[agents_key] = []
+
+            agent_combo_scores[agents_key].append(quality)
+
+        # Find best performing combination
+        best_combo = None
+        best_avg_quality = 0.0
+
+        for agents, qualities in agent_combo_scores.items():
+            avg_quality = sum(qualities) / len(qualities)
+            if avg_quality > best_avg_quality:
+                best_avg_quality = avg_quality
+                best_combo = list(agents)
+
+        if best_combo and best_avg_quality >= 0.7:  # Only suggest if 70%+ success rate
+            return {
+                "suggested_agents": best_combo,
+                "confidence": best_avg_quality,
+                "based_on_incidents": len(selections),
+                "pattern_keywords": pattern["keywords"]
+            }
+
+        return None
 
 # Global instance
 kb = KnowledgeBase(use_local=True)

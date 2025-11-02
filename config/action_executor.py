@@ -1,31 +1,63 @@
 from typing import Dict, List
 import time
 from config.knowledge_base import kb
+from config.terminal_logger import terminal_logger
 from datetime import datetime
+import uuid
 
 class ActionExecutor:
     """Execute agent recommendations as real actions"""
-    
+
     def __init__(self, dry_run: bool = False):
         self.dry_run = dry_run
         self.execution_log = []
-    
-    def execute_action(self, action: Dict) -> Dict:
+        self.current_incident_id = None  # PHASE 1: Track current incident
+
+    def set_incident_context(self, incident_id: str) -> None:
+        """PHASE 1: Set the incident context for actions"""
+        self.current_incident_id = incident_id
+
+    def execute_action(self, action: Dict, incident_id: str = None) -> Dict:
         """Execute single action with rollback capability"""
         action_type = action.get("type")
         params = action.get("params", {})
-        
+
+        # PHASE 1: Use provided incident_id or fall back to context
+        target_incident_id = incident_id or self.current_incident_id
+
+        # PHASE 2 TASK 2.3: Create unique action ID
+        action_id = f"ACT-{uuid.uuid4().hex[:8]}"
+
+        # NARRATIVE: Action validation
+        host = params.get('host', 'unknown')
+        terminal_logger.add_log(
+            f"ActionExecutor validating action {action_type} for host {host}",
+            "TASKOPTS"
+        )
+
         result = {
-            "action_id": f"ACT-{int(time.time())}",
+            "action_id": action_id,
             "type": action_type,
             "status": "dry_run" if self.dry_run else "executing",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "incident_id": target_incident_id,  # PHASE 1: Link to incident
+            "params": params  # PHASE 2: Include params in result
         }
-        
+
         if self.dry_run:
             result["message"] = f"DRY RUN: Would execute {action_type}"
+            terminal_logger.add_log(
+                f"ActionExecutor dry-run mode - simulating {action_type} on {host}",
+                "TASKOPTS"
+            )
             return result
-        
+
+        # NARRATIVE: Execute action
+        terminal_logger.add_log(
+            f"ActionExecutor executing {action_type} on {host} (action ID: {action_id})",
+            "TASKOPTS"
+        )
+
         # Execute based on type
         if action_type == "suppress_alerts":
             result.update(self._suppress_alerts(params))
@@ -39,8 +71,48 @@ class ActionExecutor:
             result.update(self._scale_resources(params))
         else:
             result["status"] = "unknown_action"
-        
+            terminal_logger.add_log(
+                f"ActionExecutor unknown action type: {action_type}",
+                "WARNING"
+            )
+
+        # NARRATIVE: Execution result
+        status = result.get('status', 'unknown')
+        if status == 'success' or status == 'completed':
+            terminal_logger.add_log(
+                f"ActionExecutor successfully completed {action_type} on {host}",
+                "SUCCESS"
+            )
+        else:
+            terminal_logger.add_log(
+                f"ActionExecutor action {action_type} completed with status: {status}",
+                "TASKOPTS"
+            )
+
         self.execution_log.append(result)
+
+        # PHASE 1: Link action to incident if available
+        # PHASE 2 TASK 2.3: Create audit log entry
+        if target_incident_id:
+            kb.add_incident_action(target_incident_id, {
+                'type': action_type,
+                'agent': action.get('agent', 'ActionExecutor'),
+                'description': f"Executed {action_type} on {params.get('host', 'unknown')}",
+                'status': result.get('status'),
+                'action_id': action_id
+            })
+
+            # Also log to timeline
+            kb.add_timeline_event(target_incident_id, {
+                'agent': action.get('agent', 'ActionExecutor'),
+                'event': f"Executed action: {action_type}",
+                'details': {
+                    'action_id': action_id,
+                    'target': params.get('host', 'unknown'),
+                    'status': result.get('status')
+                }
+            })
+
         return result
     
     def _suppress_alerts(self, params):

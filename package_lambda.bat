@@ -1,4 +1,3 @@
-
 @echo off
 echo Creating Lambda deployment package...
 
@@ -8,13 +7,12 @@ mkdir lambda_package
 
 :: Copy code
 xcopy /E /I agents lambda_package\agents
-xcopy /E /I tools lambda_package\tools
+xcopy /E /I config lambda_package\config
 xcopy /E /I data lambda_package\data
 copy aws\lambda_handler.py lambda_package\
-copy .env lambda_package\
 
-:: Install dependencies
-pip install --target lambda_package strands-agents strands-agents-tools boto3 anthropic pydantic networkx
+:: Install dependencies (no anthropic, no strands)
+pip install --target lambda_package boto3 pydantic networkx fastapi python-dotenv
 
 :: Create ZIP
 cd lambda_package
@@ -22,3 +20,6 @@ powershell Compress-Archive -Path * -DestinationPath ..\opsforge-lambda.zip -For
 cd ..
 
 echo Package created: opsforge-lambda.zip
+echo.
+echo Size:
+powershell Get-Item opsforge-lambda.zip ^| Select-Object Name, @{Name="SizeMB";Expression={[Math]::Round($_.Length / 1MB, 2)}}

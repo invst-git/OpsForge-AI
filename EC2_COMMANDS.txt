@@ -1,0 +1,88 @@
+=== EC2 DEPLOYMENT COMMANDS ===
+
+STEP 1: Launch EC2 Instance
+----------------------------
+aws ec2 run-instances \
+    --image-id ami-0e001c9271cf7f3b9 \
+    --instance-type t3.medium \
+    --key-name YOUR_KEY_NAME \
+    --security-group-ids sg-XXXXXXXXX \
+    --subnet-id subnet-XXXXXXXXX \
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=opsforge-ai}]' \
+    --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":30}}]'
+
+OR use AWS Console:
+1. EC2 Dashboard > Launch Instance
+2. Name: opsforge-ai
+3. AMI: Ubuntu 22.04 LTS
+4. Instance type: t3.medium (2 vCPU, 4GB RAM)
+5. Key pair: Create new or use existing
+6. Network: Default VPC
+7. Storage: 30 GB gp3
+8. Launch
+
+
+STEP 2: Configure Security Group
+---------------------------------
+Allow ports:
+- 22 (SSH) from your IP
+- 80 (HTTP) from 0.0.0.0/0
+- 443 (HTTPS) from 0.0.0.0/0 (optional)
+
+AWS CLI:
+aws ec2 authorize-security-group-ingress --group-id sg-XXXXXXXXX --protocol tcp --port 22 --cidr YOUR_IP/32
+aws ec2 authorize-security-group-ingress --group-id sg-XXXXXXXXX --protocol tcp --port 80 --cidr 0.0.0.0/0
+
+
+STEP 3: Get EC2 Public IP/DNS
+------------------------------
+aws ec2 describe-instances \
+    --filters "Name=tag:Name,Values=opsforge-ai" \
+    --query 'Reservations[0].Instances[0].PublicDnsName' \
+    --output text
+
+
+STEP 4: Deploy Application
+---------------------------
+.\deploy_to_ec2.ps1 -KeyPath "C:\path\to\your-key.pem" -EC2Host "ec2-xx-xx-xx-xx.compute.amazonaws.com"
+
+
+STEP 5: Verify Deployment
+--------------------------
+# Check backend
+curl http://YOUR_EC2_IP/api/agents
+
+# Check frontend
+Open browser: http://YOUR_EC2_IP
+
+
+STEP 6: Monitor Services
+-------------------------
+ssh -i your-key.pem ubuntu@YOUR_EC2_IP
+
+sudo systemctl status opsforge-backend
+sudo systemctl status opsforge-generator
+sudo systemctl status nginx
+
+# View logs
+sudo journalctl -u opsforge-backend -f
+sudo journalctl -u opsforge-generator -f
+
+
+STEP 7: Update Code After Changes
+----------------------------------
+.\deploy_to_ec2.ps1 -KeyPath "C:\path\to\your-key.pem" -EC2Host "ec2-xx-xx-xx-xx.compute.amazonaws.com"
+
+# Then SSH and restart services:
+ssh -i your-key.pem ubuntu@YOUR_EC2_IP
+sudo systemctl restart opsforge-backend
+sudo systemctl restart opsforge-generator
+
+
+ESTIMATED COSTS:
+t3.medium: ~$30/month (on-demand)
+EBS 30GB: ~$3/month
+Total: ~$33/month
+
+CHEAPER OPTION:
+t3.small (1GB RAM): ~$15/month - may work but slower

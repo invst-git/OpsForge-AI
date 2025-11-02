@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, Clock, XCircle, AlertCircle } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 export default function PatchManagement() {
   const [patches, setPatches] = useState([]);
@@ -29,23 +29,37 @@ export default function PatchManagement() {
 
   return (
     <div className="page-container">
-      <h1 className="page-title">Patch Management</h1>
+      <div className="page-header">
+        <h1 className="page-title">Patch Management</h1>
+      </div>
 
       <div className="metrics-grid-4">
         <div className="metric-card">
-          <div className="metric-label">Total Systems</div>
+          <div className="metric-header">
+            <span className="metric-label">Total Systems</span>
+            <AlertCircle size={20} className="metric-icon" style={{ color: '#6c757d' }} />
+          </div>
           <div className="metric-value">{totalSystems}</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">Patched</div>
+          <div className="metric-header">
+            <span className="metric-label">Patched</span>
+            <CheckCircle size={20} className="metric-icon success" />
+          </div>
           <div className="metric-value success">{patchedCount}</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">Pending</div>
+          <div className="metric-header">
+            <span className="metric-label">Pending</span>
+            <Clock size={20} className="metric-icon warning" />
+          </div>
           <div className="metric-value warning">{pendingCount}</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">Failed</div>
+          <div className="metric-header">
+            <span className="metric-label">Failed</span>
+            <XCircle size={20} className="metric-icon danger" />
+          </div>
           <div className="metric-value danger">{failedCount}</div>
         </div>
       </div>
@@ -81,25 +95,36 @@ export default function PatchManagement() {
 
       {selectedPatch && (
         <div className="modal-overlay" onClick={() => setSelectedPatch(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
             <div className="modal-header">
               <h2>{selectedPatch.name}</h2>
-              <button onClick={() => setSelectedPatch(null)}>×</button>
+              <button className="icon-btn" onClick={() => setSelectedPatch(null)}>×</button>
             </div>
             <div className="modal-body">
-              <h3>Canary Phases</h3>
-              {selectedPatch.canary_phases?.map((phase, i) => (
-                <div key={i} className="phase-row">
-                  <span>Phase {phase.phase}: {phase.hosts} hosts</span>
-                  <span className={`status-badge ${phase.status}`}>{phase.status}</span>
-                </div>
-              ))}
-              <h3>Health Checks</h3>
-              <ul>
-                {selectedPatch.health_checks?.map((check, i) => (
-                  <li key={i}>{check}</li>
+              <div className="detail-section">
+                <h3>Canary Phases</h3>
+                {selectedPatch.canary_phases?.map((phase, i) => (
+                  <div key={i} className="phase-row" style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '12px',
+                    backgroundColor: i % 2 === 0 ? '#f9f9f9' : 'white',
+                    borderRadius: '4px',
+                    marginBottom: '8px'
+                  }}>
+                    <span style={{ fontWeight: '500' }}>Phase {phase.phase}: {phase.hosts} hosts</span>
+                    <span className={`status-badge ${phase.status}`}>{phase.status}</span>
+                  </div>
                 ))}
-              </ul>
+              </div>
+              <div className="detail-section">
+                <h3>Health Checks</h3>
+                <ul style={{ paddingLeft: '20px', lineHeight: '1.8' }}>
+                  {selectedPatch.health_checks?.map((check, i) => (
+                    <li key={i} style={{ marginBottom: '8px' }}>{check}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
           </div>
         </div>
