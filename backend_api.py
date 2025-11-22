@@ -101,6 +101,11 @@ async def get_agents():
                 last_action_iso = None
                 if last_action_time:
                     try:
+                        # Normalize integer timestamps from KnowledgeBase to datetime
+                        if isinstance(last_action_time, (int, float)):
+                            from datetime import datetime as dt
+                            last_action_time = dt.fromtimestamp(last_action_time)
+
                         last_action_str = live_generator._get_relative_time(last_action_time)
                         if isinstance(last_action_time, str):
                             last_action_iso = last_action_time
@@ -312,21 +317,41 @@ async def get_incident_detail(incident_id: str):
     # Calculate timestamps
     created_at = created_time.isoformat()
     resolved_at = None
+    resolved_time = None
     if status == "resolved" or processing_state == "resolved":
-        # Calculate resolved time based on creation + typical resolution time
-        # Or use metadata if available
+        # Prefer real resolved_at if available
         resolved_time = incident.get('resolved_at')
+
+        # If not present, derive from timeline or incident actions
+        if not resolved_time:
+            try:
+                timeline_events = incident.get('processing_timeline', [])
+                candidate_ts = None
+                # Use max timeline timestamp if available
+                if timeline_events:
+                    candidate_ts = max(
+                        (e.get('timestamp') for e in timeline_events if e.get('timestamp') is not None),
+                        default=None
+                    )
+                # Fallback to latest incident_action timestamp
+                if candidate_ts is None:
+                    incident_actions = incident.get('incident_actions', [])
+                    candidate_ts = max(
+                        (a.get('timestamp') for a in incident_actions if a.get('timestamp') is not None),
+                        default=None
+                    )
+                if candidate_ts is not None:
+                    from datetime import datetime as dt
+                    # candidate_ts is stored as Unix epoch seconds (int)
+                    resolved_time = dt.fromtimestamp(candidate_ts)
+            except Exception:
+                resolved_time = None
+
         if resolved_time:
             if isinstance(resolved_time, str):
                 resolved_at = resolved_time
             else:
                 resolved_at = resolved_time.isoformat()
-        else:
-            # Estimate: resolved incidents typically take 5-10 minutes
-            import random
-            resolution_minutes = random.randint(5, 10)
-            resolved_time = created_time + timedelta(minutes=resolution_minutes)
-            resolved_at = resolved_time.isoformat()
 
     # Format root cause
     root_cause = incident.get('root_cause', 'Unknown')
@@ -335,12 +360,56 @@ async def get_incident_detail(incident_id: str):
     else:
         formatted_root_cause = format_root_cause_analysis(root_cause)
 
+    # Derive a concise root cause summary for exports
+    if root_cause == "Processing...":
+        root_cause_summary = "Analysis in progress..."
+    else:
+        # Use raw root_cause text to keep summary focused
+        root_cause_summary = format_llm_synthesis(str(root_cause), max_length=200)
+
+    # Derive affected components with sensible fallback
+    affected_components = incident.get('affected_components')
+    if not affected_components:
+        # Fallback: use unique hosts from alerts as components
+        hosts = set()
+        for alert in alerts:
+            if isinstance(alert, dict):
+                host = alert.get('host')
+                if host:
+                    hosts.add(host)
+        affected_components = sorted(hosts) if hosts else []
+
+    # Derive correlation score / confidence if not already stored
+    correlation_score = incident.get('correlation_score')
+    confidence_score = incident.get('confidence')
+    if correlation_score is None or confidence_score is None:
+        try:
+            from agents.strands_tools import correlate_alerts
+            alert_dicts = []
+            for alert in alerts:
+                if isinstance(alert, dict):
+                    alert_dicts.append({
+                        "alert_id": alert.get("alert_id"),
+                        "title": alert.get("title", ""),
+                        "host": alert.get("host", ""),
+                        "timestamp": alert.get("timestamp"),
+                        "severity": alert.get("severity", "medium"),
+                    })
+            if alert_dicts:
+                corr_result = correlate_alerts(alert_dicts)
+                if correlation_score is None:
+                    correlation_score = corr_result.get("confidence")
+                if confidence_score is None:
+                    confidence_score = corr_result.get("confidence")
+        except Exception:
+            pass
+
     # Format why-trace analysis
     formatted_why_trace = {
         "analysis": formatted_root_cause,
-        "affected_components": incident.get('affected_components', []),
-        "correlation_score": incident.get('correlation_score', 0),
-        "confidence": incident.get('confidence', 0),
+        "affected_components": affected_components,
+        "correlation_score": correlation_score,
+        "confidence": confidence_score,
         "recommended_actions": [
             format_llm_synthesis(action)
             for action in incident.get('recommended_actions', [])
@@ -433,6 +502,8 @@ async def get_incident_detail(incident_id: str):
         "processing_state": processing_state,
         "processingState": processing_state,
         "why_trace": formatted_why_trace,
+        "root_cause_summary": root_cause_summary,
+        "rootCauseSummary": root_cause_summary,
         "rootCause": formatted_root_cause,  # For backward compatibility
         "timeline": timeline,
         "audit_logs": audit_logs,
@@ -472,7 +543,15 @@ async def get_patches():
             "name": p['name'],
             "systems": p['systems'],
             "progress": p['progress'],
-            "status": p['status']
+            "status": p['status'],
+            # Non-breaking additional context for richer UI
+            "created_at": (
+                p.get("created_at").isoformat()
+                if isinstance(p.get("created_at"), datetime)
+                else p.get("created_at")
+            ),
+            "risk_score": p.get("risk_score"),
+            "incident_id": p.get("incident_id"),
         }
         for p in live_generator.patches
     ]
@@ -484,13 +563,31 @@ async def get_patch_detail(plan_id: str):
     if not patch:
         return {"error": "Not found"}
 
+    created_at = patch.get("created_at")
+    if isinstance(created_at, datetime):
+        created_at = created_at.isoformat()
+
+    affected_hosts = patch.get('affected_hosts')
+    if not affected_hosts:
+        affected_hosts = [f"host-{i}" for i in range(1, min(6, patch['systems']))]
+
+    health_checks = patch.get('health_checks')
+    if not health_checks:
+        health_checks = ["CPU < 80%", "Memory < 70%", "Service response < 200ms"]
+
     return {
         "id": patch['id'],
         "name": patch['name'],
+        "systems": patch.get('systems'),
+        "status": patch.get('status'),
+        "progress": patch.get('progress'),
+        "risk_score": patch.get('risk_score'),
+        "created_at": created_at,
+        "incident_id": patch.get('incident_id'),
         "canary_phases": patch.get('phases', []),
-        "affected_hosts": [f"host-{i}" for i in range(1, min(6, patch['systems']))],
+        "affected_hosts": affected_hosts,
         "rollback_plan": "Automated rollback within 10 minutes if health checks fail",
-        "health_checks": ["CPU < 80%", "Memory < 70%", "Service response < 200ms"]
+        "health_checks": health_checks
     }
 
 @app.get("/api/forecasts")
@@ -594,7 +691,8 @@ async def get_audit_logs(incident_id: str = None):
                 "action": formatted_action,
                 "target": target,
                 "status": formatted_status.lower(),
-                "time": formatted_time
+                "time": formatted_time,
+                "incident_id": incident_id
             })
 
     else:
@@ -607,6 +705,7 @@ async def get_audit_logs(incident_id: str = None):
             if action_count >= 50:
                 break
 
+            incident_id = incident.get('incident_id')
             incident_actions = incident.get('incident_actions', [])
             for action in incident_actions:
                 if action_count >= 50:
@@ -643,7 +742,7 @@ async def get_audit_logs(incident_id: str = None):
                     "target": target,
                     "status": formatted_status.lower(),
                     "time": formatted_time,
-                    "incident_id": incident.get('id', 'N/A')  # Include incident ID for context
+                    "incident_id": incident_id
                 })
                 action_count += 1
 
@@ -735,9 +834,15 @@ async def get_logs(limit: int = 1000, log_type: str = None):
         "filter": log_type or "ALL"
     }
 
+@app.post("/api/logs/clear")
+async def clear_logs():
+    """Clear all logs from the terminal logger buffer"""
+    from config.terminal_logger import terminal_logger
+    terminal_logger.clear_logs()
+    return {"status": "cleared"}
+
 if __name__ == "__main__":
     import uvicorn
     # FIX: Explicitly disable reload to prevent state reset
     # Auto-reload causes module reimport which resets live_generator instance
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)
-

@@ -210,7 +210,7 @@ class EnhancedOrchestrator:
         if "TaskOps" in agents_involved and incident_id:
             terminal_logger.add_log(
                 "TaskOps assessing automation opportunities",
-                "TASKOPTS"
+                "TASKOPS"
             )
             kb.add_incident_action(incident_id, {
                 'type': 'automation_assessment',

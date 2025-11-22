@@ -34,7 +34,7 @@ class TerminalLogger:
         'ALERTOPS': '\033[94m',       # Blue
         'PREDICTIVEOPS': '\033[96m',  # Cyan
         'PATCHOPS': '\033[92m',       # Green
-        'TASKOPTS': '\033[33m',       # Orange/Yellow
+        'TASKOPS': '\033[33m',       # Orange/Yellow
         'LEARNING': '\033[35m',       # Magenta
         'PERCEPTION': '\033[90m',     # Dark Gray
         'SYNTHESIS': '\033[91m',      # Light Red
@@ -55,7 +55,7 @@ class TerminalLogger:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
-                    cls._instance.log_buffer = deque(maxlen=200)
+                    cls._instance.log_buffer = deque(maxlen=1000)
 
                     # Read output mode from environment variable
                     # Options: "full", "selective", "none"

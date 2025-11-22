@@ -237,6 +237,43 @@ class LiveDataGenerator:
                 component = "compute"
             else:
                 component = "system"
+
+        # Derive affected hosts from incident alerts (unique hostnames)
+        affected_hosts = []
+        if alerts:
+            hosts = set()
+            for alert in alerts:
+                if isinstance(alert, dict):
+                    host = alert.get('host')
+                    if host:
+                        hosts.add(host)
+            affected_hosts = sorted(hosts)
+
+        # Derive health checks based on component type
+        if component == "database":
+            health_checks = [
+                "DB connections < 80% of max",
+                "Query latency p95 < 200ms",
+                "Replication lag < 5s"
+            ]
+        elif component == "web-server":
+            health_checks = [
+                "HTTP 5xx rate < 1%",
+                "P95 response time < 300ms",
+                "Active sessions within normal range"
+            ]
+        elif component in ("memory-mgmt", "compute", "system"):
+            health_checks = [
+                "CPU < 80% sustained for 5m",
+                "Memory < 75% sustained for 5m",
+                "Critical services healthy"
+            ]
+        else:
+            health_checks = [
+                "CPU < 80%",
+                "Memory < 70%",
+                "Service response < 200ms"
+            ]
         
         self.patch_counter += 1
         return {
@@ -251,7 +288,9 @@ class LiveDataGenerator:
                 {"name": "Phase 2 (15 hosts)", "status": "pending", "progress": 0},
                 {"name": "Phase 3 (remaining)", "status": "pending", "progress": 0}
             ],
-            "risk_score": random.uniform(0.1, 0.4)
+            "risk_score": random.uniform(0.1, 0.4),
+            "affected_hosts": affected_hosts,
+            "health_checks": health_checks
         }
     
     async def progress_patch(self, patch):
@@ -557,7 +596,7 @@ class LiveDataGenerator:
 
                         # NARRATIVE: Actions executed
                         for action_desc in executed_actions:
-                            terminal_logger.add_log(f"Executed action: {action_desc}", "TASKOPTS")
+                            terminal_logger.add_log(f"Executed action: {action_desc}", "TASKOPS")
                         terminal_logger.add_log(
                             f"TaskOps completed {len(executed_actions)} remediation actions for {incident_id}",
                             "SUCCESS"

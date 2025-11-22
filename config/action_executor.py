@@ -32,7 +32,7 @@ class ActionExecutor:
         host = params.get('host', 'unknown')
         terminal_logger.add_log(
             f"ActionExecutor validating action {action_type} for host {host}",
-            "TASKOPTS"
+            "TASKOPS"
         )
 
         result = {
@@ -48,14 +48,14 @@ class ActionExecutor:
             result["message"] = f"DRY RUN: Would execute {action_type}"
             terminal_logger.add_log(
                 f"ActionExecutor dry-run mode - simulating {action_type} on {host}",
-                "TASKOPTS"
+                "TASKOPS"
             )
             return result
 
         # NARRATIVE: Execute action
         terminal_logger.add_log(
             f"ActionExecutor executing {action_type} on {host} (action ID: {action_id})",
-            "TASKOPTS"
+            "TASKOPS"
         )
 
         # Execute based on type
@@ -86,7 +86,7 @@ class ActionExecutor:
         else:
             terminal_logger.add_log(
                 f"ActionExecutor action {action_type} completed with status: {status}",
-                "TASKOPTS"
+                "TASKOPS"
             )
 
         self.execution_log.append(result)

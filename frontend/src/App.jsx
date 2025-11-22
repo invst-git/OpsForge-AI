@@ -233,9 +233,19 @@ function App() {
     }
   };
 
-  const clearLogs = () => {
-    if (window.confirm('Clear all logs?')) {
+  const clearLogs = async () => {
+    if (!window.confirm('Clear all logs?')) {
+      return;
+    }
+    try {
+      await fetch(`${API_BASE}/logs/clear`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
       setLogs([]);
+    } catch (error) {
+      console.error('Failed to clear logs:', error);
+      alert('Failed to clear logs. Check backend connection.');
     }
   };
 
@@ -258,7 +268,7 @@ function App() {
       'ALERTOPS': '#3498db',       // Blue - alert correlation
       'PREDICTIVEOPS': '#1abc9c',  // Teal - predictive analysis
       'PATCHOPS': '#2ecc71',       // Green - patch operations
-      'TASKOPTS': '#f39c12',       // Gold - task execution
+      'TASKOPS': '#f39c12',       // Gold - task execution
       'LEARNING': '#8e44ad',       // Violet - learning/memory
       'PERCEPTION': '#34495e',     // Dark gray - perception
       'SYNTHESIS': '#d35400'       // Dark orange - synthesis

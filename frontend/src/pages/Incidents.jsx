@@ -59,11 +59,15 @@ export default function Incidents() {
     // Helper to format timestamp
     const formatTimestamp = (timestamp) => {
       if (!timestamp) return 'N/A';
+      if (typeof timestamp === 'string') {
+        // Backend already returns ISO-like strings; preserve as-is to avoid timezone shifts
+        return timestamp;
+      }
       try {
         const date = new Date(timestamp);
-        return date.toISOString();
+        return Number.isNaN(date.getTime()) ? String(timestamp) : date.toISOString();
       } catch (e) {
-        return timestamp;
+        return String(timestamp);
       }
     };
 
@@ -109,12 +113,35 @@ export default function Incidents() {
       .filter(detail => detail !== null)
       .map(detail => {
         const createdTime = detail.createdAt || detail.created_at || 'N/A';
-        const resolvedTime = detail.status === 'resolved' ? (detail.resolvedAt || detail.resolved_at || createdTime) : 'N/A';
-        const duration = detail.status === 'resolved' ? calculateDuration(createdTime, resolvedTime) : 'In Progress';
 
-        const rootCauseSummary = (detail.why_trace?.analysis || detail.rootCause || 'N/A')
+        // Prefer resolvedAt / resolved_at when present, regardless of status casing
+        const resolvedTimeRaw = detail.resolvedAt || detail.resolved_at || null;
+
+        const duration =
+          resolvedTimeRaw
+            ? calculateDuration(createdTime, resolvedTimeRaw)
+            : (detail.status && detail.status.toLowerCase() === 'resolved' ? 'N/A' : 'In Progress');
+
+        const rootCauseSummarySource =
+          detail.root_cause_summary ||
+          detail.rootCauseSummary ||
+          detail.why_trace?.analysis ||
+          detail.rootCause ||
+          'N/A';
+
+        const rootCauseSummary = rootCauseSummarySource
           .split('\n')[0] // First line only for summary
           .substring(0, 200); // Limit to 200 chars
+
+        const affectedComponents = (detail.why_trace?.affected_components || []).join('; ');
+
+        const correlationScore = detail.why_trace && detail.why_trace.correlation_score !== undefined && detail.why_trace.correlation_score !== null
+          ? detail.why_trace.correlation_score
+          : '';
+
+        const confidenceLevel = detail.why_trace && detail.why_trace.confidence !== undefined && detail.why_trace.confidence !== null
+          ? detail.why_trace.confidence
+          : '';
 
         return [
           detail.id,
@@ -122,16 +149,16 @@ export default function Incidents() {
           detail.severity || 'medium',
           detail.status || 'investigating',
           formatTimestamp(createdTime),
-          formatTimestamp(resolvedTime),
+          formatTimestamp(resolvedTimeRaw),
           duration,
           detail.alerts?.length || 0,
           (detail.agents_involved || []).join('; ') || 'N/A',
           detail.audit_logs?.length || 0,
           detail.processingState || detail.processing_state || 'N/A',
           rootCauseSummary,
-          (detail.why_trace?.affected_components || []).join('; ') || 'N/A',
-          detail.why_trace?.correlation_score || 0,
-          detail.why_trace?.confidence || 0
+          affectedComponents || '',
+          correlationScore,
+          confidenceLevel
         ].map(escapeCSV);
       });
 
