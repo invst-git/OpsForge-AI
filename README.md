@@ -20,7 +20,6 @@ The system is built to run locally in a fully simulated mode, with integration w
 
 The system is composed of a Python backend, AI agents, a data simulation layer, and a React frontend.
 
-```mermaid
 flowchart LR
     subgraph Frontend
         UI[React Dashboard]
@@ -40,7 +39,7 @@ flowchart LR
     end
 
     subgraph Data
-        KB[Knowledge Base <br/> (In-Memory / DynamoDB)]
+        KB["Knowledge Base | In-Memory / DynamoDB"]
     end
     
     subgraph External
@@ -68,7 +67,7 @@ flowchart LR
     PREDICTIVEOPS --> BEDROCK
     PATCHOPS --> BEDROCK
     TASKOPS --> BEDROCK
-```
+
 
 ## Directory Structure
 
