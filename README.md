@@ -1,209 +1,201 @@
-OpsForge AI — Agentic IT Operations (Prototype)
-================================================
+# OpsForge AI — Agentic IT Operations (Prototype)
 
-Overview
---------
-OpsForge AI is a prototype agentic IT operations platform. It continuously simulates incidents and metrics, correlates alerts, predicts risks, plans patches safely, executes routine tasks, and exposes its state via a FastAPI backend consumed by a React dashboard. It is designed to run locally in a fully simulated mode, and optionally integrate with AWS Bedrock for LLM reasoning and DynamoDB for persistence.
+## Overview
 
-Key Capabilities
-----------------
-- Alert correlation: Graph-based clustering plus LLM synthesis (AlertOps).
-- Predictive analysis: Trend forecasting and risk scoring (PredictiveOps).
-- Patch management: Preflight, canary, health verification, full rollout, rollback (PatchOps).
-- Task automation: Routine operations such as restarts, cleanup, backups (TaskOps).
-- Orchestration: Agent selection, perception, learning, and unified synthesis (Orchestrator).
-- Observability: Incidents, timelines, audit logs, metrics, forecasting, and terminal logs API.
-- Safety: Global kill switch to pause generation and block autonomous actions.
+OpsForge AI is an agentic IT operations platform designed to simulate and autonomously manage a modern IT environment. It continuously generates incidents and metrics, correlates alerts into actionable incidents, predicts operational risks, plans and executes safe patch deployments, and automates routine tasks. Its state is exposed via a FastAPI backend, which is consumed by a real-time React dashboard.
 
-Architecture
-------------
+The system is built to run locally in a fully simulated mode, with integration with AWS Bedrock for advanced LLM-driven reasoning and AWS DynamoDB for persistent storage.
+
+## Key Capabilities
+
+*   **Alert Correlation**: Utilizes graph-based clustering and LLM synthesis to reduce alert noise and identify core incidents (AlertOps).
+*   **Predictive Analysis**: Employs time-series forecasting to predict resource consumption spikes and identify potential future risks (PredictiveOps).
+*   **Safe Patch Management**: Implements a robust patching workflow including pre-flight checks, canary deployments, health verification, phased rollouts, and automated rollbacks (PatchOps).
+*   **Task Automation**: Executes routine operational tasks such as service restarts, cache clearing, and backups to maintain system health (TaskOps).
+*   **Intelligent Orchestration**: A central orchestrator handles perception, learning, agent selection, and synthesis of findings from specialist agents.
+*   **Comprehensive Observability**: The frontend provides a dashboard with views for incidents, patch management, forecasting, and audit logs, along with a live terminal viewer for system logs.
+*   **System Safety**: A global kill switch allows for the immediate halt of all incident generation and autonomous actions, providing a crucial safety layer.
+
+## Architecture
+
+The system is composed of a Python backend, AI agents, a data simulation layer, and a React frontend.
+
 ```mermaid
 flowchart LR
-  subgraph Frontend
-    UI["React app (Vite)\nPages: Dashboard, Incidents, PatchManagement, Forecasting, AuditLogs"]
-  end
+    subgraph Frontend
+        UI[React Dashboard]
+    end
 
-  subgraph Backend
-    BE["FastAPI (backend_api.py)\nREST API + lifespan task"]
-    Live["LiveDataGenerator\nincident + metrics simulators\npatch planning & progress\nmetrics_cache & forecast_cache\nkill switch & recent actions"]
-    Exec["ActionExecutor\nexecutes actions, links to incident"]
-    TL["TerminalLogger\nshared in-memory buffer"]
-  end
+    subgraph Backend
+        FASTAPI[FastAPI Server]
+        GENERATOR[Live Data Generator]
+    end
 
-  subgraph Agents
-    Orch["EnhancedOrchestrator\nPerception, Learning, AgentSelector, Synthesis"]
-    Sel["AgentSelector\nLLM JSON + heuristic fallback"]
-    AlertOps[AlertOps]
-    PredOps[PredictiveOps]
-    PatchOps[PatchOps]
-    TaskOps[TaskOps]
-    Tools["agents/strands_tools.py\ncorrelate_alerts, predict_failure,\nrun_preflight_checks, deploy_canary,\nverify_health, deploy_full_patch, rollback_patch"]
-  end
+    subgraph Agents
+        ORCHESTRATOR[Orchestrator]
+        ALERTOPS[AlertOps]
+        PREDICTIVEOPS[PredictiveOps]
+        PATCHOPS[PatchOps]
+        TASKOPS[TaskOps]
+    end
 
-  subgraph Data
-    KB["KnowledgeBase (local default)\nincidents, incident_actions, timeline\npattern_library, agent_knowledge\nagent_selection_patterns"]
-  end
+    subgraph Data
+        KB[Knowledge Base <br/> (In-Memory / DynamoDB)]
+    end
+    
+    subgraph External
+        BEDROCK[AWS Bedrock]
+    end
 
-  subgraph External
-    Bedrock["AWS Bedrock (boto3 bedrock-runtime)"]
-    DynamoDB["AWS DynamoDB (optional)"]
-  end
-
-  subgraph Serverless
-    Lambda["aws/lambda_handler.py"]
-    APIGW["SAM API /analyze"]
-    EBR["EventBridge rules"]
-  end
-
-  UI --> BE
-  BE <--> Live
-  BE --> TL
-  BE <--> KB
-
-  Live --> Orch
-  Live --> Exec
-  Live --> TL
-  Live --> KB
-
-  Exec --> KB
-  Exec --> TL
-  Exec --> PatchOps
-
-  Orch --> Sel
-  Sel --> Bedrock
-  Orch --> AlertOps
-  Orch --> PredOps
-  Orch --> PatchOps
-  Orch --> TaskOps
-  Orch --> KB
-
-  AlertOps --> Tools
-  PredOps --> Tools
-  PatchOps --> Tools
-  TaskOps --> Tools
-
-  AlertOps --> KB
-  PatchOps --> KB
-  TaskOps --> KB
-
-  AlertOps --> TL
-  PredOps --> TL
-  PatchOps --> TL
-  TaskOps --> TL
-  Orch --> Bedrock
-
-  KB --- DynamoDB
-
-  APIGW --> Lambda
-  EBR --> Lambda
-  Lambda --> Orch
+    UI --> FASTAPI
+    FASTAPI <--> GENERATOR
+    FASTAPI <--> KB
+    
+    GENERATOR --> ORCHESTRATOR
+    
+    ORCHESTRATOR --> ALERTOPS
+    ORCHESTRATOR --> PREDICTIVEOPS
+    ORCHESTRATOR --> PATCHOPS
+    ORCHESTRATOR --> TASKOPS
+    
+    ALERTOPS --> KB
+    PREDICTIVEOPS --> KB
+    PATCHOPS --> KB
+    TASKOPS --> KB
+    
+    ORCHESTRATOR --> BEDROCK
+    ALERTOPS --> BEDROCK
+    PREDICTIVEOPS --> BEDROCK
+    PATCHOPS --> BEDROCK
+    TASKOPS --> BEDROCK
 ```
 
-Directory Layout (selected)
----------------------------
-- `backend_api.py` — FastAPI app, routes, lifespan startup of the live generator.
-- `live_data_generator.py` — Incident and metrics simulation, patch plans, metrics/forecasts, recent actions, kill switch.
-- `agents/` — Specialist agents and orchestrator:
-  - `orchestrator.py` — Enhanced orchestrator (perception, learning, selection, synthesis).
-  - `alert_ops.py`, `predictive_ops.py`, `patch_ops.py`, `task_ops.py` — Agent behaviors.
-  - `strands_tools.py` — Deterministic tool functions (correlation, prediction, patch steps, task runners).
-- `config/` — Infrastructure and utilities:
-  - `bedrock_client.py` — Anthropic-compatible messages API over AWS Bedrock runtime.
-  - `knowledge_base.py` — In-memory knowledge base with optional DynamoDB backing.
-  - `text_formatter.py` — Formatting helpers for UI.
-  - `terminal_logger.py` — Shared terminal log buffer with output modes.
-  - `agent_selector.py`, `learning.py`, `perception.py` — Orchestrator support.
-- `data/` — Pydantic models and simulators for alerts and metrics.
-- `frontend/` — Vite + React dashboard.
-- `aws/` — Serverless (SAM) template and Lambda handler (alternative deployment path).
+## Directory Structure
 
-Quick Start (Local Development)
--------------------------------
-Prerequisites: Python 3.10+, Node 18+, AWS CLI configured if using Bedrock.
+*   `backend_api.py`: The main FastAPI application that serves the API and manages the simulation lifecycle.
+*   `live_data_generator.py`: The core simulation engine that generates alerts, metrics, and manages patch plans.
+*   `agents/`: Contains the logic for the specialist AI agents.
+    *   `orchestrator.py`: The central agent that selects other agents and synthesizes their findings.
+    *   `alert_ops.py`, `predictive_ops.py`, `patch_ops.py`, `task_ops.py`: Specialist agents for correlation, prediction, patching, and task automation.
+    *   `strands_tools.py`: A collection of deterministic functions used by the agents to perform specific operations like correlation and health checks.
+*   `config/`: Configuration modules for core components.
+    *   `knowledge_base.py`: Implements the in-memory knowledge base with an DynamoDB backend.
+    *   `bedrock_client.py`: A wrapper for interacting with the AWS Bedrock API.
+    *   `agent_selector.py`: Logic for intelligently selecting the right agent(s) for an incident.
+    *   `terminal_logger.py`: A shared, thread-safe logger for providing real-time log streams to the UI.
+*   `data/`: Pydantic models for data structures and simulators for alerts and metrics.
+*   `frontend/`: The React-based user interface, built with Vite.
+*   `aws/`: Contains an AWS SAM template for serverless deployment of the agent logic.
+*   `EC2_COMMANDS.txt`, `deploy_to_ec2.ps1`, `ec2_setup.sh`: Scripts and instructions for deploying the application to an AWS EC2 instance.
 
-Backend
-1. Create and activate a virtual environment.
-   - Linux/macOS: `python3 -m venv .venv && source .venv/bin/activate`
-   - Windows (PowerShell): `python -m venv .venv; .\.venv\Scripts\Activate.ps1`
-2. Install dependencies: `pip install -r requirements.txt`
-3. Optional environment variables:
-   - `CORS_ORIGIN` (default `http://localhost:5173`)
-   - `AWS_REGION` (default `us-east-1`)
-   - `STRANDS_MODEL_ID` (default `claude-sonnet-4-20250514`)
-   - `TERMINAL_OUTPUT` — `full` (default), `selective`, or `none`
-4. Start the backend: `python backend_api.py`
-   - Runs FastAPI on `http://0.0.0.0:8000` with lifespan task launching the generator loop.
+## Local Development Quick Start
 
-Frontend
-1. `cd frontend`
-2. `npm install`
-3. Optional: set `VITE_API_BASE` in `.env` (default `http://localhost:8000/api`).
-4. `npm run dev` — open the URL printed by Vite (typically `http://localhost:5173`).
+### Prerequisites
 
-Simulating Activity
--------------------
-The generator starts idle. Use the API or UI buttons to control simulation and safety.
+*   Python 3.10+
+*   Node.js 18+
+*   AWS CLI configured with credentials if using AWS Bedrock.
 
-- Start simulation: `POST /api/simulation/start`
-- Stop simulation: `POST /api/simulation/stop`
-- Simulation state: `GET /api/simulation/status`
-- Kill switch toggle: `POST /api/kill-switch/toggle`
-- Kill switch state: `GET /api/kill-switch/status`
-- Terminal output mode: `POST /api/terminal-output-mode` with `{ "mode": "full|selective|none" }`
+### Backend Setup
 
-Core API Endpoints
-------------------
-- Metrics: `GET /api/metrics` — aggregate KPIs (alertsReduced, mttrReduction, tasksAutomated, activeIncidents, patchesPending, upcomingRisks).
-- Agents: `GET /api/agents` — per-agent status, action counts, last activity time.
-- Incidents: `GET /api/incidents` — recent incidents; `GET /api/incidents/{id}` — detail with timeline and audit logs.
-- Actions: `GET /api/actions/recent` — recent actions summary.
-- Patches: `GET /api/patches` — plans; `GET /api/patches/{id}` — canary phases and checks.
-- Forecasts: `GET /api/forecasts` — 24h CPU/memory trends and upcoming risks.
-- Audit logs: `GET /api/audit-logs` — global view or `?incident_id=...` for a specific incident.
-- Logs: `GET /api/logs?limit=...&log_type=...` — terminal logs for the live viewer.
+1.  **Create and activate a virtual environment:**
+    ```bash
+    # For macOS/Linux
+    python3 -m venv .venv && source .venv/bin/activate
+    
+    # For Windows (PowerShell)
+    python -m venv .venv; .\.venv\Scripts\Activate.ps1
+    ```
 
-LLM and Persistence
--------------------
-AWS Bedrock (LLM)
-- Used by orchestrator and agents via `config/bedrock_client.py`.
-- Requires AWS credentials with `bedrock:InvokeModel` permission and access to the selected Anthropic model.
-- Configure `AWS_REGION` and optionally `STRANDS_MODEL_ID`.
-- If LLM calls fail or are throttled, the system continues in a degraded mode where possible (e.g., selector fallback).
+2.  **Install Python dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-DynamoDB (optional)
-- A local in-memory knowledge base is enabled by default (`kb = KnowledgeBase(use_local=True)`).
-- To use DynamoDB, define required tables (`config/dynamodb_schema.py`) and switch to `use_local=False` in `config/knowledge_base.py`.
-- Tables: incidents, pattern library, agent knowledge (GSIs defined where applicable).
+3.  **Configure Environment Variables:**
+    Create a `.env` file in the root directory or set the following variables:
+    *   `AWS_REGION`: The AWS region for Bedrock (defaults to `us-east-1`).
+    *   `CORS_ORIGIN`: The origin for the frontend (defaults to `http://localhost:5173`).
+    *   `TERMINAL_OUTPUT`: Controls backend console logging. Can be `full` (default), `selective`, or `none`.
 
-Serverless (Optional)
----------------------
-- SAM template: `aws/template.yaml` — defines a Lambda function and API Gateway route (`/analyze`) plus EventBridge rules.
-- Lambda handler: `aws/lambda_handler.py` — routes alert/metric/full-incident events to the orchestrator path.
-- Build and deploy with AWS SAM CLI. Ensure IAM permissions for Bedrock and any selected persistence.
+4.  **Run the backend server:**
+    ```bash
+    python backend_api.py
+    ```
+    The API will be available at `http://localhost:8000`.
 
-Terminal Logs and Observability
--------------------------------
-- Backend prints are controlled by `TERMINAL_OUTPUT` and also buffered in `TerminalLogger` for UI consumption.
-- Log types include: GENERATOR, ORCHESTRATOR, ALERTOPS, PREDICTIVEOPS, PATCHOPS, TASKOPTS, LEARNING, PERCEPTION, SYNTHESIS, INCIDENT, SUCCESS, WARNING, ERROR, START, STOP, METRICS, INFO.
-- UI provides filters, output mode control, and CSV export for incidents and audit logs.
+### Frontend Setup
 
-Security and Safety
--------------------
-- Kill switch halts incident generation, blocks action execution, and pauses patch progress across the system.
-- CORS origins are restricted via `CORS_ORIGIN` (comma-separated allowed origins).
-- Store AWS credentials securely; restrict Bedrock and DynamoDB access per least privilege.
-- Do not expose the backend publicly without a proper ingress layer (ALB/API Gateway) and authentication.
+1.  **Navigate to the frontend directory:**
+    ```bash
+    cd frontend
+    ```
 
-Troubleshooting
----------------
-- CORS errors: set `CORS_ORIGIN` to the frontend origin (e.g., `http://localhost:5173`).
-- Bedrock errors: verify AWS credentials, region, and model entitlement; check `bedrock:InvokeModel` permissions.
-- DynamoDB usage: create tables via `config/dynamodb_schema.py` and ensure `use_local=False` before switching.
-- Frontend cannot reach backend: confirm `VITE_API_BASE` and backend host/port; verify backend is running on `:8000`.
-- No incidents appearing: start simulation (`POST /api/simulation/start`) and check `/api/logs` for activity.
+2.  **Install Node.js dependencies:**
+    ```bash
+    npm install
+    ```
 
-Known Notes
------------
-- The local prototype is resilient to partial failures (e.g., agent LLM errors) and continues processing with degraded outputs where applicable.
-- The Lambda handler references orchestrator usage; ensure the orchestrator symbol aligns with the implementation before deploying serverless.
+3.  **Run the development server:**
+    ```bash
+    npm run dev
+    ```
+    The UI will be available at `http://localhost:5173`.
 
+## Usage
+
+Once the backend and frontend are running, you can control the simulation through the UI.
+
+*   **Start/Stop Simulation**: Use the "Start Simulation" button on the sidebar to begin generating incidents. The system will create new, complex incidents every 30-60 seconds.
+*   **Kill Switch**: The "Kill Switch" in the header provides an immediate-stop mechanism. When activated, it pauses all incident generation, blocks autonomous actions, and halts any in-progress patch deployments.
+*   **System Logs**: Open the "System Logs" panel at the bottom of the screen to view a real-time narrative from the agents as they perceive, reason about, and act on simulated events.
+
+### Core API Endpoints
+
+The FastAPI backend exposes several endpoints that the frontend consumes:
+
+*   `GET /api/metrics`: Provides high-level KPIs like alerts reduced and MTTR improvement.
+*   `GET /api/agents`: Returns the status and activity counts for each agent.
+*   `GET /api/incidents`: Lists recent incidents.
+*   `GET /api/incidents/{id}`: Retrieves detailed information for a specific incident, including its timeline and audit log.
+*   `GET /api/patches`: Shows all current and recent patch plans.
+*   `GET /api/forecasts`: Provides 24-hour resource forecasts and a list of predicted risks.
+*   `GET /api/logs`: Streams system logs to the frontend's terminal viewer.
+
+## Configuration
+
+### AWS Bedrock (LLM Integration)
+
+The agents use AWS Bedrock for advanced reasoning, summarization, and decision-making.
+
+*   **Setup**: Ensure your environment is configured with AWS credentials that have `bedrock:InvokeModel` permissions.
+*   **Model**: The system is configured to use an Anthropic Claude model (e.g., Sonnet), but this can be changed via the `STRANDS_MODEL_ID` environment variable.
+*   **Resilience**: If Bedrock API calls fail, the system is designed to fall back to heuristic-based methods where possible, allowing it to operate in a degraded mode.
+
+### DynamoDB (Persistence)
+
+By default, the system uses an in-memory knowledge base (`config/knowledge_base.py`) that resets on restart. For persistence, it can be configured to use AWS DynamoDB.
+
+*   **To Enable**:
+    1.  Create the necessary DynamoDB tables by running `python config/dynamodb_schema.py`.
+    2.  In `config/knowledge_base.py`, change `kb = KnowledgeBase(use_local=True)` to `kb = KnowledgeBase(use_local=False)`.
+*   **Tables**: The schema defines tables for incident memory, learned patterns, and agent-specific knowledge.
+
+## Deployment
+
+### AWS EC2
+
+The repository includes scripts to facilitate deployment to an AWS EC2 instance.
+
+1.  **Launch an Instance**: Use the AWS Console or CLI to launch a `t3.medium` Ubuntu 22.04 instance. Ensure its security group allows inbound traffic on ports 22 (from your IP) and 80.
+2.  **Run Deployment Script**: Use the `deploy_to_ec2.ps1` PowerShell script, providing the path to your PEM key and the EC2 host's public DNS.
+    ```powershell
+    .\deploy_to_ec2.ps1 -KeyPath "path/to/key.pem" -EC2Host "ec2-xx-xx-xx-xx.compute-1.amazonaws.com"
+    ```
+    This script will copy the application files, run the `ec2_setup.sh` script on the instance to install dependencies, configure NGINX as a reverse proxy, and set up `systemd` services to run the application.
+
+### AWS Serverless (SAM)
+
+An alternative deployment path is provided using the AWS Serverless Application Model (SAM). The `aws/template.yaml` file defines a Lambda function and an API Gateway endpoint that can receive events and trigger the orchestration logic. This is suitable for an event-driven architecture.
+
+[![Ask DeepWiki](https://devin.ai/assets/askdeepwiki.png)](https://deepwiki.com/invst-git/OpsForge-AI)
