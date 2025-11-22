@@ -39,7 +39,7 @@ flowchart LR
     end
 
     subgraph Data
-        KB["Knowledge Base | In-Memory / DynamoDB"]
+        KB["Knowledge Base\n(In-Memory / DynamoDB)"]
     end
     
     subgraph External
@@ -67,6 +67,7 @@ flowchart LR
     PREDICTIVEOPS --> BEDROCK
     PATCHOPS --> BEDROCK
     TASKOPS --> BEDROCK
+
 
 
 ## Directory Structure
