@@ -1,4 +1,4 @@
-# OpsForge AI — Agentic IT Operations (Prototype)
+# OpsForge AI - Agentic IT Operations (Prototype)
 
 ## Overview
 
