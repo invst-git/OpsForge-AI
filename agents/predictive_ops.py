@@ -1,6 +1,7 @@
 from config.bedrock_client import BedrockClient
 from agents.strands_tools import predict_failure
 from config.terminal_logger import terminal_logger
+from agents.ets_forecaster import generate_ets_summary
 import os
 import json
 
@@ -27,7 +28,7 @@ Output format:
 
 
 def analyze_metrics(metrics, forecast_hours=2):
-    """Analyze metrics through PredictiveOps using Anthropic SDK"""
+    """Analyze metrics through PredictiveOps using Anthropic SDK with ETS assist"""
     metric_dicts = [
         {
             "host": m.host,
@@ -52,6 +53,22 @@ def analyze_metrics(metrics, forecast_hours=2):
         "PREDICTIVEOPS"
     )
 
+    # ETS: deterministic lightweight forecast to augment LLM output
+    ets_points = max(4, int(forecast_hours * 12))  # approx 5m buckets for given horizon
+    ets_summary = generate_ets_summary(metric_dicts, horizon=ets_points)
+
+    if ets_summary.get("series"):
+        terminal_logger.add_log(
+            f"PredictiveOps ETS forecasting covered {len(ets_summary['series'])} series; top anomaly z-score "
+            f"{ets_summary['top_anomalies'][0]['z_score'] if ets_summary.get('top_anomalies') else 0}",
+            "PREDICTIVEOPS"
+        )
+    else:
+        terminal_logger.add_log(
+            "PredictiveOps ETS forecasting skipped (insufficient data)",
+            "PREDICTIVEOPS"
+        )
+
     # Call predict_failure tool directly
     prediction_result = predict_failure(metric_dicts, forecast_hours=forecast_hours)
 
@@ -69,6 +86,11 @@ Prediction analysis results:
 - Confidence: {prediction_result['confidence']}
 - Forecast Details: {json.dumps(prediction_result['forecast'], indent=2) if prediction_result['forecast'] else 'No concerning trends'}
 - Reasoning: {', '.join(prediction_result['reasoning'])}
+
+ETS (Holt linear) forecast summary:
+- Series analyzed: {len(ets_summary.get('series', []))}
+- Top anomalies (z-score): {json.dumps(ets_summary.get('top_anomalies', [])[:2], indent=2)}
+- Sample forecast: {json.dumps(ets_summary.get('series', [])[:1], indent=2)}
 
 Based on this prediction analysis, provide:
 1. Risk assessment summary
@@ -94,4 +116,10 @@ Based on this prediction analysis, provide:
         "PREDICTIVEOPS"
     )
 
-    return response_text
+    # Return structured result with backward-compatible summary
+    return {
+        "text": response_text,
+        "ets": ets_summary,
+        "risk_level": prediction_result.get("risk_level"),
+        "confidence": prediction_result.get("confidence")
+    }

@@ -4,12 +4,12 @@
 
 OpsForge AI is an agentic IT operations platform designed to simulate and autonomously manage a modern IT environment. It continuously generates incidents and metrics, correlates alerts into actionable incidents, predicts operational risks, plans and executes safe patch deployments, and automates routine tasks. Its state is exposed via a FastAPI backend, which is consumed by a real-time React dashboard.
 
-The system is built to run locally in a fully simulated mode, with integration with AWS Bedrock for advanced LLM-driven reasoning and AWS DynamoDB for persistent storage.
+The system is built to run locally in a fully simulated mode, with optional AWS Bedrock for narrative/synthesis assistance while core agents remain tool-driven and learn continuously from feedback; AWS DynamoDB provides persistent storage when enabled.
 
 ## Key Capabilities
 
-*   **Alert Correlation**: Utilizes graph-based clustering and LLM synthesis to reduce alert noise and identify core incidents (AlertOps).
-*   **Predictive Analysis**: Employs time-series forecasting to predict resource consumption spikes and identify potential future risks (PredictiveOps).
+*   **Alert Correlation**: Utilizes graph-based clustering with feedback-driven synthesis (LLM is only used for narrative summaries) to reduce alert noise and identify core incidents (AlertOps).
+*   **Predictive Analysis**: Employs time-series forecasting (ETS/Holt linear) to predict resource consumption spikes and identify potential future risks (PredictiveOps).
 *   **Safe Patch Management**: Implements a robust patching workflow including pre-flight checks, canary deployments, health verification, phased rollouts, and automated rollbacks (PatchOps).
 *   **Task Automation**: Executes routine operational tasks such as service restarts, cache clearing, and backups to maintain system health (TaskOps).
 *   **Intelligent Orchestration**: A central orchestrator handles perception, learning, agent selection, and synthesis of findings from specialist agents.
@@ -19,6 +19,8 @@ The system is built to run locally in a fully simulated mode, with integration w
 ## Architecture
 
 The system is composed of a Python backend, AI agents, a data simulation layer, and a React frontend.
+
+PredictiveOps pairs a deterministic ETS (Holt linear) forecaster with optional LLM narration: simulated metrics are smoothed to produce short-horizon forecasts and anomaly scores, which are bundled into `/api/forecasts` and injected into the PredictiveOps prompt for higher-confidence risk calls without changing existing API shapes.
 
 ```mermaid
 flowchart LR
@@ -167,9 +169,9 @@ The FastAPI backend exposes several endpoints that the frontend consumes:
 
 ## Configuration
 
-### AWS Bedrock (LLM Integration)
+### AWS Bedrock (Optional LLM Integration)
 
-The agents use AWS Bedrock for advanced reasoning, summarization, and decision-making.
+The agents are tool-driven and learn from feedback; AWS Bedrock is optional and only used for narrative summarization and synthesis overlays.
 
 *   **Setup**: Ensure your environment is configured with AWS credentials that have `bedrock:InvokeModel` permissions.
 *   **Model**: The system is configured to use an Anthropic Claude model (e.g., Sonnet), but this can be changed via the `STRANDS_MODEL_ID` environment variable.

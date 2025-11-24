@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from data.alert_simulator import AlertSimulator
 from data.metrics_simulator import MetricsSimulator
 from agents.orchestrator import enhanced_orchestrator
+from agents.ets_forecaster import generate_ets_summary
 from config.knowledge_base import kb
 from config.action_executor import executor
 from config.terminal_logger import terminal_logger
@@ -66,7 +67,8 @@ class LiveDataGenerator:
             "anomaly_detection_accuracy": 92.0,
             "risk_prediction_confidence": 87.0,
             "patch_success_rate": 94.0,
-            "upcoming_risks": self._generate_upcoming_risks()
+            "upcoming_risks": self._generate_upcoming_risks(),
+            "ets_forecasts": {}
         }
     
     def toggle_kill_switch(self):
@@ -383,6 +385,24 @@ class LiveDataGenerator:
                 f"host-{random.randint(1,10)}",
                 random.choice(["cpu_spike", "memory_leak"])
             )
+
+            # Prepare metrics as dicts for ETS forecasting and orchestrator context
+            metric_dicts = [
+                {
+                    "host": m.host,
+                    "metric_name": m.metric_name,
+                    "value": m.value,
+                    "timestamp": m.timestamp
+                }
+                for m in metrics
+            ]
+
+            # Update ETS forecast cache with lightweight Holt forecasts
+            try:
+                ets_summary = generate_ets_summary(metric_dicts, horizon=12)
+                self.forecast_cache["ets_forecasts"] = ets_summary
+            except Exception as ets_err:
+                print(f"[WARN] ETS forecasting failed: {ets_err}")
 
             # NARRATIVE: Metrics generation
             terminal_logger.add_log(f"Generating metrics: {len(metrics)} data points for failure pattern analysis", "GENERATOR")

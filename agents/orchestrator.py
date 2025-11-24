@@ -301,13 +301,35 @@ class EnhancedOrchestrator:
 
     def _synthesize(self, alert_analysis, prediction, learned):
         """Synthesize findings using Anthropic SDK"""
-        # Handle None values gracefully
+        import json
+
+        # Normalize alert analysis
         alert_str = str(alert_analysis)[:300] if alert_analysis else 'Alert analysis unavailable - agent failed'
-        prediction_str = str(prediction)[:200] if prediction else 'N/A'
+
+        # Normalize prediction + optional ETS block
+        prediction_summary = 'N/A'
+        ets_block = None
+        if isinstance(prediction, dict):
+            prediction_summary = (prediction.get("text") or prediction.get("summary") or str(prediction))[:500]
+            ets_block = prediction.get("ets")
+        elif prediction:
+            prediction_summary = str(prediction)[:500]
+
+        ets_snippet = ""
+        if ets_block and ets_block.get("series"):
+            try:
+                ets_snippet = json.dumps({
+                    "series": ets_block.get("series", [])[:2],
+                    "top_anomalies": ets_block.get("top_anomalies", [])[:3],
+                    "horizon": ets_block.get("horizon")
+                })[:600]
+            except Exception:
+                ets_snippet = str(ets_block)[:400]
 
         context = f"""
 Alert Analysis: {alert_str}
-Prediction: {prediction_str}
+Prediction: {prediction_summary}
+ETS Forecasts: {ets_snippet or 'none'}
 Learned Patterns: {learned['successful_patterns']} successful patterns in KB
 """
         prompt = f"Synthesize unified response:\n{context}"
