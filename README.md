@@ -41,7 +41,7 @@ flowchart TD
     Executor --> Timeline[Incident Actions + Timeline]
     Orchestrator --> Outcome[Outcome Record]
     Executor --> Outcome
-    Outcome --> KB[Knowledge Base\n(outcomes + action stats)]
+    Outcome --> KB[Knowledge Base<br/>(outcomes + action stats)]
     KB --> AgentSelector
     KB --> Policies[Action Policy Signals]
     Policies --> Executor
