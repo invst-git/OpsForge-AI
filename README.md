@@ -4,7 +4,7 @@
 
 OpsForge AI is an agentic IT operations platform designed to simulate and autonomously manage a modern IT environment. It continuously generates incidents and metrics, correlates alerts into actionable incidents, predicts operational risks, plans and executes safe patch deployments, and automates routine tasks. Its state is exposed via a FastAPI backend, which is consumed by a real-time React dashboard.
 
-The system is built to run locally in a fully simulated mode, with optional AWS Bedrock for narrative/synthesis assistance while core agents remain tool-driven and learn continuously from feedback; AWS DynamoDB provides persistent storage when enabled.
+The system is built to run locally in a fully simulated mode, with AWS Bedrock for narrative/synthesis assistance while core agents remain tool-driven and learn continuously from feedback; AWS DynamoDB provides persistent storage when enabled. Agents capture outcomes and action results to refine selection thresholds and remediation policies over time without altering existing API shapes.
 
 ## Key Capabilities
 
@@ -20,7 +20,7 @@ The system is built to run locally in a fully simulated mode, with optional AWS 
 
 The system is composed of a Python backend, AI agents, a data simulation layer, and a React frontend.
 
-PredictiveOps pairs a deterministic ETS (Holt linear) forecaster with optional LLM narration: simulated metrics are smoothed to produce short-horizon forecasts and anomaly scores, which are bundled into `/api/forecasts` and injected into the PredictiveOps prompt for higher-confidence risk calls without changing existing API shapes.
+PredictiveOps pairs a deterministic ETS (Holt linear) forecaster with LLM narration: simulated metrics are smoothed to produce short-horizon forecasts and anomaly scores, which are bundled into `/api/forecasts` and injected into the PredictiveOps prompt for higher-confidence risk calls without changing existing API shapes.
 
 ```mermaid
 flowchart LR
@@ -72,6 +72,8 @@ flowchart LR
     TASKOPS --> BEDROCK
 ```
 
+## Architecture Flow
+<img width="1500" height="564" alt="Image" src="https://github.com/user-attachments/assets/a0426163-827a-43ea-a90a-e30a5cc992b8" />
 
 
 
@@ -169,9 +171,9 @@ The FastAPI backend exposes several endpoints that the frontend consumes:
 
 ## Configuration
 
-### AWS Bedrock (Optional LLM Integration)
+### AWS Bedrock (LLM Integration)
 
-The agents are tool-driven and learn from feedback; AWS Bedrock is optional and only used for narrative summarization and synthesis overlays.
+The agents are tool-driven and learn from feedback; AWS Bedrock is used for narrative summarization and synthesis overlays.
 
 *   **Setup**: Ensure your environment is configured with AWS credentials that have `bedrock:InvokeModel` permissions.
 *   **Model**: The system is configured to use an Anthropic Claude model (e.g., Sonnet), but this can be changed via the `STRANDS_MODEL_ID` environment variable.

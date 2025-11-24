@@ -113,6 +113,12 @@ class ActionExecutor:
                 }
             })
 
+        # Record outcome for learning loop (non-blocking, additive)
+        try:
+            kb.record_action_outcome(action_type, result.get("status"), incident_id=target_incident_id, agent=action.get('agent'))
+        except Exception:
+            pass
+
         return result
     
     def _suppress_alerts(self, params):

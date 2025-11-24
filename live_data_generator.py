@@ -621,6 +621,20 @@ class LiveDataGenerator:
                             f"TaskOps completed {len(executed_actions)} remediation actions for {incident_id}",
                             "SUCCESS"
                         )
+
+                    # Record outcome snapshot for learning loop (after actions applied)
+                    try:
+                        incident_record = kb.get_incident(incident_id)
+                        if incident_record:
+                            kb.record_outcome({
+                                "incident_id": incident_id,
+                                "status": incident_record.get("processing_state"),
+                                "agents_used": incident_record.get("agents_involved", []),
+                                "actions": [a.get("action_type") for a in incident_record.get("incident_actions", [])],
+                                "residual_risk": None
+                            })
+                    except Exception as outcome_err:
+                        print(f"[WARN] Failed to record outcome for {incident_id}: {outcome_err}")
                     
                 finally:
                     # FIX: Remove from processing set when done

@@ -1,19 +1,26 @@
 import boto3
+import os
+from collections import deque
 from datetime import datetime
 from typing import Dict, List, Optional
 import json
 import uuid
 
+
 class KnowledgeBase:
     """Persistent storage for agent memory and learning"""
-    
-    def __init__(self, use_local=True):
+
+    def __init__(self, use_local: bool = True):
+        self.learning_enabled = os.getenv("LEARNING_LOOP_ENABLED", "true").lower() == "true"
+
         if use_local:
             # Local simulation for development
             self.incident_memory = {}
             self.pattern_library = {}
             self.agent_knowledge = {}
-            self.agent_selection_patterns = {}  # Phase C: Track keyword→agents→success
+            self.agent_selection_patterns = {}  # Phase C: Track keyword-based success
+            self.action_policy_stats = {}
+            self.outcome_history = deque(maxlen=500)
             self.local_mode = True
         else:
             self.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
@@ -21,7 +28,7 @@ class KnowledgeBase:
             self.pattern_table = self.dynamodb.Table('opsforge-pattern-library')
             self.knowledge_table = self.dynamodb.Table('opsforge-agent-knowledge')
             self.local_mode = False
-    
+
     # Incident Memory
     def store_incident(self, incident_data: Dict) -> str:
         """Store incident with agent decisions"""
@@ -36,7 +43,7 @@ class KnowledgeBase:
             'outcome': incident_data.get('outcome', 'pending'),
             'agents_involved': incident_data.get('agents_involved', []),
             'metadata': incident_data.get('metadata', {}),
-            # NEW: Processing state tracking (Phase 1)
+            # Processing state tracking
             'processing_state': incident_data.get('processing_state', 'created'),
             'incident_actions': incident_data.get('incident_actions', []),  # Actions specific to this incident
             'processing_timeline': incident_data.get('processing_timeline', [])  # Real timeline of events
@@ -48,7 +55,7 @@ class KnowledgeBase:
             self.incident_table.put_item(Item=record)
 
         return incident_id
-    
+
     def get_incident(self, incident_id: str) -> Optional[Dict]:
         """Retrieve incident by ID"""
         if self.local_mode:
@@ -56,7 +63,7 @@ class KnowledgeBase:
         else:
             response = self.incident_table.get_item(Key={'incident_id': incident_id})
             return response.get('Item')
-    
+
     def get_similar_incidents(self, keywords: List[str], limit: int = 5) -> List[Dict]:
         """Find similar past incidents"""
         if self.local_mode:
@@ -70,12 +77,12 @@ class KnowledgeBase:
             # DynamoDB scan with filter (simplified)
             response = self.incident_table.scan(Limit=limit)
             return response.get('Items', [])
-    
+
     # Pattern Library
     def store_pattern(self, pattern_type: str, pattern_data: Dict) -> str:
         """Store learned correlation/prediction pattern"""
         pattern_id = f"PAT-{uuid.uuid4().hex[:8]}"
-        
+
         record = {
             'pattern_id': pattern_id,
             'pattern_type': pattern_type,  # 'correlation', 'prediction', 'remediation'
@@ -85,19 +92,19 @@ class KnowledgeBase:
             'details': pattern_data.get('details', {}),
             'created_at': int(datetime.now().timestamp())
         }
-        
+
         if self.local_mode:
             self.pattern_library[pattern_id] = record
         else:
             self.pattern_table.put_item(Item=record)
-        
+
         return pattern_id
-    
+
     def get_patterns_by_type(self, pattern_type: str) -> List[Dict]:
         """Get all patterns of specific type"""
         if self.local_mode:
-            return [p for p in self.pattern_library.values() 
-                   if p.get('pattern_type') == pattern_type]
+            return [p for p in self.pattern_library.values()
+                    if p.get('pattern_type') == pattern_type]
         else:
             response = self.pattern_table.query(
                 IndexName='type-index',
@@ -105,7 +112,7 @@ class KnowledgeBase:
                 ExpressionAttributeValues={':pt': pattern_type}
             )
             return response.get('Items', [])
-    
+
     # Agent Knowledge
     def store_agent_knowledge(self, agent_name: str, key: str, value: Dict):
         """Store agent-specific knowledge"""
@@ -120,7 +127,7 @@ class KnowledgeBase:
                 'value': json.dumps(value),
                 'updated_at': int(datetime.now().timestamp())
             })
-    
+
     def get_agent_knowledge(self, agent_name: str, key: str) -> Optional[Dict]:
         """Retrieve agent knowledge"""
         if self.local_mode:
@@ -133,7 +140,7 @@ class KnowledgeBase:
             if item:
                 return json.loads(item['value'])
             return None
-    
+
     def update_pattern_stats(self, pattern_id: str, success: bool):
         """Update pattern success rate based on outcome"""
         if self.local_mode:
@@ -146,7 +153,7 @@ class KnowledgeBase:
                 pattern['success_rate'] = successes / pattern['occurrences']
         # DynamoDB implementation would use UpdateItem
 
-    # NEW PHASE 1: Incident-Specific Action Tracking
+    # Incident-Specific Action Tracking
     def add_incident_action(self, incident_id: str, action: Dict) -> None:
         """Add an action specific to an incident"""
         incident = self.get_incident(incident_id)
@@ -197,7 +204,7 @@ class KnowledgeBase:
             return incident.get('processing_timeline', [])
         return []
 
-    # Phase C: Agent Selection Pattern Learning
+    # Agent Selection Pattern Learning
     def record_agent_selection(self, keywords: List[str], agents_used: List[str], outcome_quality: float):
         """Record which agents were selected for which keywords and how successful it was
 
@@ -206,6 +213,9 @@ class KnowledgeBase:
             agents_used: List of agents that were selected
             outcome_quality: Success score 0.0-1.0 (1.0 = fully resolved, 0.0 = failed)
         """
+        if not self.learning_enabled:
+            return
+
         if not self.local_mode:
             return  # DynamoDB implementation later
 
@@ -225,16 +235,29 @@ class KnowledgeBase:
             "timestamp": datetime.now().isoformat()
         })
 
+    def get_agent_selection_stats(self, keywords: List[str], min_incidents: int = 3) -> Optional[Dict]:
+        """Return aggregate stats for a keyword pattern to support adaptive thresholds"""
+        if not self.learning_enabled or not self.local_mode:
+            return None
+
+        pattern_key = "_".join(sorted(keywords[:3]))
+        pattern = self.agent_selection_patterns.get(pattern_key)
+        if not pattern:
+            return None
+
+        selections = pattern.get("selections", [])
+        if len(selections) < min_incidents:
+            return None
+
+        qualities = [s.get("outcome_quality", 0.0) for s in selections]
+        avg_quality = sum(qualities) / len(qualities) if qualities else 0.0
+        return {
+            "count": len(selections),
+            "avg_quality": avg_quality
+        }
+
     def get_learned_agent_suggestions(self, keywords: List[str], min_incidents: int = 3) -> Optional[Dict]:
-        """Get learned agent suggestions based on past successful patterns
-
-        Args:
-            keywords: Keywords from current incident
-            min_incidents: Minimum incidents needed to make suggestions
-
-        Returns:
-            Dict with suggested agents and confidence, or None if not enough data
-        """
+        """Get learned agent suggestions based on past successful patterns"""
         if not self.local_mode:
             return None  # DynamoDB implementation later
 
@@ -281,6 +304,60 @@ class KnowledgeBase:
             }
 
         return None
+
+    # Outcome tracking & action policy learning
+    def record_outcome(self, outcome: Dict) -> None:
+        """Store a minimal outcome record for later learning (rolling buffer)."""
+        if not self.learning_enabled or not self.local_mode:
+            return
+
+        safe_outcome = {
+            "incident_id": outcome.get("incident_id"),
+            "status": outcome.get("status"),
+            "agents_used": outcome.get("agents_used", []),
+            "actions": outcome.get("actions", []),
+            "residual_risk": outcome.get("residual_risk", None),
+            "timestamp": datetime.now().isoformat()
+        }
+        self.outcome_history.append(safe_outcome)
+
+    def get_recent_outcomes(self, limit: int = 20) -> List[Dict]:
+        """Return recent outcomes for inspection or learning."""
+        outcomes = list(self.outcome_history)
+        return outcomes[-limit:]
+
+    def record_action_outcome(self, action_type: str, status: str, incident_id: Optional[str] = None, agent: Optional[str] = None):
+        """Track action success/failure counts for policy learning."""
+        if not self.learning_enabled or not self.local_mode:
+            return
+
+        action_key = action_type or "unknown"
+        stats = self.action_policy_stats.get(action_key, {
+            "success": 0,
+            "failure": 0,
+            "last_incident": None,
+            "last_status": None,
+            "agent": None
+        })
+
+        if status in ("completed", "success", "dry_run"):
+            stats["success"] += 1
+        else:
+            stats["failure"] += 1
+
+        stats["last_incident"] = incident_id
+        stats["last_status"] = status
+        stats["agent"] = agent
+        stats["updated_at"] = datetime.now().isoformat()
+
+        self.action_policy_stats[action_key] = stats
+
+    def get_action_policy_stats(self, action_type: str) -> Optional[Dict]:
+        """Return aggregated stats for an action type."""
+        if not self.local_mode:
+            return None
+        return self.action_policy_stats.get(action_type)
+
 
 # Global instance
 kb = KnowledgeBase(use_local=True)

@@ -169,12 +169,15 @@ JSON only, no explanation:"""
         # Otherwise, use LLM/keyword selection
         scores = self.select_agents_llm(alerts, metrics)
 
+        # Adaptive thresholding based on historical outcomes (safe bounds)
+        adjusted_threshold = self._adjust_threshold(keywords, threshold)
+
         # Always include Orchestrator
         selected = ["Orchestrator"]
 
         # Add agents above threshold
         for agent, score in scores.items():
-            if score >= threshold:
+            if score >= adjusted_threshold:
                 selected.append(agent)
 
         # AlertOps baseline: If no other agents selected, include AlertOps
@@ -202,6 +205,27 @@ JSON only, no explanation:"""
             return kb.get_learned_agent_suggestions(keywords, min_incidents=3)
         except Exception:
             return None
+
+    def _adjust_threshold(self, keywords: List[str], base_threshold: int) -> int:
+        """Nudge selection threshold based on historical success; safe and bounded."""
+        try:
+            from config.knowledge_base import kb
+            stats = kb.get_agent_selection_stats(keywords, min_incidents=5)
+            if not stats:
+                return base_threshold
+
+            avg_quality = stats.get("avg_quality", 0.0)
+            threshold = base_threshold
+
+            # If we see strong success, be slightly more permissive; if weak, be conservative.
+            if avg_quality >= 0.75:
+                threshold = max(50, base_threshold - 5)
+            elif avg_quality <= 0.4:
+                threshold = min(85, base_threshold + 5)
+
+            return threshold
+        except Exception:
+            return base_threshold
 
 # Global instance
 agent_selector = AgentSelector()
