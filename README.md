@@ -22,6 +22,15 @@ The system is composed of a Python backend, AI agents, a data simulation layer, 
 
 PredictiveOps pairs a deterministic ETS (Holt linear) forecaster with LLM narration: simulated metrics are smoothed to produce short-horizon forecasts and anomaly scores, which are bundled into `/api/forecasts` and injected into the PredictiveOps prompt for higher-confidence risk calls without changing existing API shapes.
 
+Agents run a continuous feedback loop: incidents and actions are recorded with outcomes, selection success rates are aggregated per keyword pattern, and action policy stats track success versus rollback. AgentSelector adapts thresholds within safe bounds based on historical quality, and action policies gain preference signals from past executions, all without altering existing API contracts.
+
+Feedback-driven learning loop (how it works):
+- Outcome capture: Each incident stores agent participation, processing state, and action audit entries; when remediation completes, a compact outcome record is appended (incident_id, status, agents_used, actions, residual risk placeholder).
+- Storage & safety: Outcomes and action stats live in the in-memory knowledge base (configurable ring buffer) and are guarded by the `LEARNING_LOOP_ENABLED` flag; all additions are additive to existing schemas and leave API shapes unchanged.
+- Selection adaptation: AgentSelector aggregates past selections by keyword pattern, computes average outcome quality, and nudges the relevance threshold within safe bounds (floor 50, ceiling 85). If data is sparse, the default static threshold is used.
+- Action policy signals: Each action type tracks success versus failure/rollback counts with last-seen context. These stats can inform future automation preferences without changing current execution paths.
+- Degradation behavior: If learning data is unavailable or disabled, the system falls back to the baseline agent selection and action policies with no change in behavior.
+
 ```mermaid
 flowchart LR
     subgraph Frontend
