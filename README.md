@@ -41,13 +41,14 @@ flowchart TD
     Executor --> Timeline[Incident Actions + Timeline]
     Orchestrator --> Outcome[Outcome Record]
     Executor --> Outcome
-    Outcome --> KB[Knowledge Base<br/>(outcomes + action stats)]
+    Outcome --> KB["Knowledge Base
+(outcomes + action stats)"]
     KB --> AgentSelector
     KB --> Policies[Action Policy Signals]
     Policies --> Executor
 ```
 
-## Overview of the architecture
+## Overview of the Architecture
 ```mermaid
 flowchart LR
     subgraph Frontend
